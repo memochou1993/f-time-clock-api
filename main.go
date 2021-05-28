@@ -1,85 +1,127 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/tebeka/selenium"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 const (
 	chromeDriverPath = "chromedriver"
+	url              = "https://femascloud.com/kklab/accounts/login"
 	port             = 8080
 )
 
+type Credentials struct {
+	Username string
+	Password string
+}
+
 func main() {
-	opts := []selenium.ServiceOption{
-		selenium.Output(os.Stderr),
+	c, err := NewCredentials()
+	if err != nil {
+		log.Println(err.Error())
 	}
+	if err := PunchIn(c); err != nil {
+		log.Println(err.Error())
+	}
+}
+
+func NewCredentials() (*Credentials, error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	c := &Credentials{}
+
+	fmt.Print("Enter Username: ")
+	username, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+	c.Username = strings.TrimSpace(username)
+
+	fmt.Print("Enter Password: ")
+	bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		return nil, err
+	}
+	c.Password = string(bytePassword)
+
+	return c, nil
+}
+
+func PunchIn(c *Credentials) error {
+	opts := []selenium.ServiceOption{}
 	service, err := selenium.NewChromeDriverService(chromeDriverPath, port, opts...)
 	if err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
 	defer service.Stop()
 
 	caps := selenium.Capabilities{"browserName": "chrome"}
 	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
 	if err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
 	defer wd.Quit()
 
-	if err := wd.Get("https://femascloud.com/kklab/accounts/login"); err != nil {
-		log.Fatalln(err.Error())
+	if err := wd.Get(url); err != nil {
+		return err
 	}
 
 	usernameInput, err := wd.FindElement(selenium.ByCSSSelector, "#user_username")
 	if err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
 	if err := usernameInput.Clear(); err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
-	if err = usernameInput.SendKeys(""); err != nil {
-		log.Fatalln(err.Error())
+	if err = usernameInput.SendKeys(c.Username); err != nil {
+		return err
 	}
 
 	passwordInput, err := wd.FindElement(selenium.ByCSSSelector, "#user_passwd")
 	if err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
 	if err := passwordInput.Clear(); err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
-	if err = passwordInput.SendKeys(""); err != nil {
-		log.Fatalln(err.Error())
+	if err = passwordInput.SendKeys(c.Password); err != nil {
+		return err
 	}
 
 	loginButton, err := wd.FindElement(selenium.ByCSSSelector, "#s_buttom")
 	if err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
 	if err := loginButton.Click(); err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
 
 	menu, err := wd.FindElement(selenium.ByCSSSelector, "#login_user")
 	if err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
 	if err := menu.Click(); err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
 
 	logoutButton, err := wd.FindElement(selenium.ByCSSSelector, "#login_user li :nth-child(5)")
 	if err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
 	if err := logoutButton.Click(); err != nil {
-		log.Fatalln(err.Error())
+		return err
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(time.Second)
+
+	return nil
 }
