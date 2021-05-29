@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/tebeka/selenium"
+	"github.com/tebeka/selenium/chrome"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -30,7 +30,7 @@ func main() {
 		log.Println(err.Error())
 	}
 	if err := PunchIn(c); err != nil {
-		log.Println(err.Error())
+		log.Println("Incorrect username or password.")
 	}
 }
 
@@ -53,6 +53,8 @@ func NewCredentials() (*Credentials, error) {
 	}
 	c.Password = string(bytePassword)
 
+	fmt.Print("\n")
+
 	return c, nil
 }
 
@@ -65,6 +67,13 @@ func PunchIn(c *Credentials) error {
 	defer service.Stop()
 
 	caps := selenium.Capabilities{"browserName": "chrome"}
+	chromeCaps := chrome.Capabilities{
+		Path: "",
+		Args: []string{
+			"--headless",
+		},
+	}
+	caps.AddChrome(chromeCaps)
 	wd, err := selenium.NewRemote(caps, fmt.Sprintf("http://localhost:%d/wd/hub", port))
 	if err != nil {
 		return err
@@ -120,8 +129,6 @@ func PunchIn(c *Credentials) error {
 	if err := logoutButton.Click(); err != nil {
 		return err
 	}
-
-	time.Sleep(time.Second)
 
 	return nil
 }
