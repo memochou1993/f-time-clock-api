@@ -3,19 +3,17 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github.com/tebeka/selenium"
+	"github.com/tebeka/selenium/chrome"
+	"golang.org/x/crypto/ssh/terminal"
 	"log"
 	"os"
 	"strings"
 	"syscall"
-	"time"
-
-	"github.com/tebeka/selenium"
-	"github.com/tebeka/selenium/chrome"
-	"golang.org/x/crypto/ssh/terminal"
 )
 
 const (
-	chromeDriverPath = "vendor/chromedriver"
+	chromeDriverPath = "./chromedriver"
 	url              = "https://femascloud.com/kklab/accounts/login"
 	port             = 8080
 )
@@ -69,7 +67,6 @@ func PunchIn(c *Credentials) error {
 
 	caps := selenium.Capabilities{"browserName": "chrome"}
 	chromeCaps := chrome.Capabilities{
-		Path: "",
 		Args: []string{
 			"--headless",
 		},
