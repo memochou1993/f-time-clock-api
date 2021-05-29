@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/tebeka/selenium"
 	"github.com/tebeka/selenium/chrome"
@@ -14,7 +15,7 @@ import (
 )
 
 const (
-	chromeDriverPath = "chromedriver"
+	chromeDriverPath = "vendor/chromedriver"
 	url              = "https://femascloud.com/kklab/accounts/login"
 	port             = 8080
 )
