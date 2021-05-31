@@ -5,16 +5,16 @@ WORKDIR /app
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -installsuffix cgo -o main .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
 # final stage
 FROM alpine:latest
 
 RUN apk --no-cache add ca-certificates
 
-WORKDIR /root
+WORKDIR /app
 
-COPY --from=builder /app/vendor ./vendor
+COPY --from=builder /app/logs ./logs
 COPY --from=builder /app/main .
 
 ENTRYPOINT ./main

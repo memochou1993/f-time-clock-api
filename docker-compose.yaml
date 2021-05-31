@@ -9,3 +9,5 @@ services:
       - .env
     ports:
       - "${APP_PORT}:80"
+    volumes:
+      - ./logs:/app/logs
