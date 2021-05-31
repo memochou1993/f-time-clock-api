@@ -101,8 +101,8 @@ func main() {
 	go scheduler.Start()
 
 	r := mux.NewRouter()
-	r.HandleFunc("/attach", AttachHandler).Methods(http.MethodPost)
-	r.HandleFunc("/detach", DetachHandler).Methods(http.MethodPost)
+	r.HandleFunc("/api/attach", AttachHandler).Methods(http.MethodPost)
+	r.HandleFunc("/api/detach", DetachHandler).Methods(http.MethodPost)
 	log.Fatal(http.ListenAndServe(":8000", r))
 }
 
