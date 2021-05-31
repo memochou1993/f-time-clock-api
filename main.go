@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -19,6 +20,7 @@ const (
 )
 
 var (
+	logger    *log.Logger
 	scheduler = NewScheduler()
 )
 
@@ -27,8 +29,31 @@ type Scheduler struct {
 }
 
 func (s *Scheduler) Start() {
-	for range time.Tick(time.Second) {
-		// TODO
+	for range time.Tick(time.Minute) {
+		for userIndex, user := range s.Users {
+			for eventIndex, event := range user.Events {
+				duration := time.Now().Sub(event.Date).Seconds()
+				if !event.Dispatched && duration >= 0 && duration < 60 {
+					s.Users[userIndex].Events[eventIndex].Dispatched = true
+					if event.Action == "IN" {
+						if err := Punch(&user.Credentials, &Script{In: true}); err != nil {
+							logger.Println(err.Error())
+							return
+						}
+						s.Users[userIndex].Events[eventIndex].Success = true
+						logger.Printf("%s: IN", user.Credentials.Username)
+					}
+					if event.Action == "OUT" {
+						if err := Punch(&user.Credentials, &Script{Out: true}); err != nil {
+							logger.Println(err.Error())
+							return
+						}
+						s.Users[userIndex].Events[eventIndex].Success = true
+						logger.Printf("%s: OUT", user.Credentials.Username)
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -39,20 +64,38 @@ func NewScheduler() *Scheduler {
 }
 
 type User struct {
-	Schedule    []time.Time
-	Credentials Credentials
-	Email       string
+	Credentials Credentials `json:"credentials"`
+	Email       string      `json:"email"`
+	Events      []Event     `json:"events"`
+}
+
+type Event struct {
+	Action     string    `json:"action"`
+	Date       time.Time `json:"date"`
+	Dispatched bool      `json:"-"`
+	Success    bool      `json:"-"`
 }
 
 type Credentials struct {
-	Username string
-	Password string
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type Script struct {
+	In  bool
+	Out bool
+}
+
+func init() {
+	file, err := os.OpenFile("./logs/log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	logger = log.New(file, "", log.Ldate|log.Ltime)
 }
 
 func main() {
-	go func() {
-		scheduler.Start()
-	}()
+	go scheduler.Start()
 
 	r := mux.NewRouter()
 	r.HandleFunc("/attach", AttachHandler).Methods(http.MethodPost)
@@ -67,17 +110,21 @@ func AttachHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
-		if err := PunchIn(&u.Credentials); err != nil {
+		if err := Punch(&u.Credentials, &Script{}); err != nil {
+			logger.Println(err.Error())
 			response(w, http.StatusUnauthorized, Payload{Error: err.Error()})
 			return
 		}
 		scheduler.Users[u.Credentials.Username] = u
+		response(w, http.StatusOK, Payload{Data: scheduler.Users[u.Credentials.Username].Events})
+		return
 	}
 	if scheduler.Users[u.Credentials.Username].Credentials.Password != u.Credentials.Password {
 		response(w, http.StatusUnauthorized, Payload{})
 		return
 	}
-	response(w, http.StatusOK, Payload{Data: scheduler.Users[u.Credentials.Username].Schedule})
+	scheduler.Users[u.Credentials.Username] = u
+	response(w, http.StatusOK, Payload{Data: scheduler.Users[u.Credentials.Username].Events})
 }
 
 func DetachHandler(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +145,7 @@ func DetachHandler(w http.ResponseWriter, r *http.Request) {
 	response(w, http.StatusOK, Payload{})
 }
 
-func PunchIn(c *Credentials) error {
+func Punch(c *Credentials, s *Script) error {
 	opts := []selenium.ServiceOption{}
 	service, err := selenium.NewChromeDriverService(chromeDriverPath, port, opts...)
 	if err != nil {
