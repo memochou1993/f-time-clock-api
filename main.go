@@ -29,6 +29,7 @@ const (
 var (
 	logger    *log.Logger
 	scheduler = NewScheduler()
+	location  = time.FixedZone("UTC+8", 8*60*60)
 )
 
 type Scheduler struct {
@@ -191,7 +192,7 @@ func (u *User) Logout() error {
 
 func (u *User) AddEvent() error {
 	params := url.Values{}
-	params.Add("data[User][date]", time.Now().Format("2006-01-02"))
+	params.Add("data[User][date]", time.Now().In(location).Format("2006-01-02"))
 	params.Add("data[UserEvent][start_time][hour]", `08`)
 	params.Add("data[UserEvent][start_time][min]", `0`)
 	params.Add("data[UserEvent][end_time][hour]", `18`)
