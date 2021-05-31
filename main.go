@@ -50,12 +50,6 @@ func (s *Scheduler) Start() {
 							continue
 						}
 					}
-					if event.Action == "TEST" {
-						if err := Punch(&user.Credentials, &Script{}); err != nil {
-							logger.Println(err.Error())
-							continue
-						}
-					}
 					s.Users[userIndex].Events[eventIndex].Success = true
 					if err := Notify(user.Email, event.Action); err != nil {
 						logger.Println(err.Error())
