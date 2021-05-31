@@ -1,15 +1,15 @@
 package main
 
 import (
-	"bufio"
+	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/gorilla/mux"
 	"github.com/tebeka/selenium"
 	"github.com/tebeka/selenium/chrome"
-	"golang.org/x/crypto/ssh/terminal"
-	"log"
-	"os"
-	"strings"
-	"syscall"
 )
 
 const (
@@ -18,43 +18,84 @@ const (
 	port             = 8080
 )
 
+var (
+	scheduler = NewScheduler()
+)
+
+type Scheduler struct {
+	Users map[string]User
+}
+
+func (s *Scheduler) Start() {
+	for range time.Tick(time.Second) {
+		// TODO
+	}
+}
+
+func NewScheduler() *Scheduler {
+	return &Scheduler{
+		Users: make(map[string]User),
+	}
+}
+
+type User struct {
+	Schedule    []time.Time
+	Credentials Credentials
+	Email       string
+}
+
 type Credentials struct {
 	Username string
 	Password string
 }
 
 func main() {
-	c, err := NewCredentials()
-	if err != nil {
-		log.Println(err.Error())
-	}
-	if err := PunchIn(c); err != nil {
-		log.Println("Incorrect username or password.")
-	}
+	go func() {
+		scheduler.Start()
+	}()
+
+	r := mux.NewRouter()
+	r.HandleFunc("/attach", AttachHandler).Methods(http.MethodPost)
+	r.HandleFunc("/detach", DetachHandler).Methods(http.MethodPost)
+	log.Fatal(http.ListenAndServe(":8000", r))
 }
 
-func NewCredentials() (*Credentials, error) {
-	reader := bufio.NewReader(os.Stdin)
-
-	c := &Credentials{}
-
-	fmt.Print("Enter Username: ")
-	username, err := reader.ReadString('\n')
-	if err != nil {
-		return nil, err
+func AttachHandler(w http.ResponseWriter, r *http.Request) {
+	var u User
+	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
-	c.Username = strings.TrimSpace(username)
-
-	fmt.Print("Enter Password: ")
-	bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
-	if err != nil {
-		return nil, err
+	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
+		if err := PunchIn(&u.Credentials); err != nil {
+			response(w, http.StatusUnauthorized, Payload{Error: err.Error()})
+			return
+		}
+		scheduler.Users[u.Credentials.Username] = u
 	}
-	c.Password = string(bytePassword)
+	if scheduler.Users[u.Credentials.Username].Credentials.Password != u.Credentials.Password {
+		response(w, http.StatusUnauthorized, Payload{})
+		return
+	}
+	response(w, http.StatusOK, Payload{Data: scheduler.Users[u.Credentials.Username].Schedule})
+}
 
-	fmt.Print("\n")
-
-	return c, nil
+func DetachHandler(w http.ResponseWriter, r *http.Request) {
+	var u User
+	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
+		response(w, http.StatusNotFound, Payload{})
+		return
+	}
+	if scheduler.Users[u.Credentials.Username].Credentials.Password != u.Credentials.Password {
+		response(w, http.StatusUnauthorized, Payload{})
+		return
+	}
+	delete(scheduler.Users, u.Credentials.Username)
+	response(w, http.StatusOK, Payload{})
 }
 
 func PunchIn(c *Credentials) error {
@@ -129,4 +170,16 @@ func PunchIn(c *Credentials) error {
 	}
 
 	return nil
+}
+
+type Payload struct {
+	Data  interface{} `json:"data,omitempty"`
+	Error string      `json:"error,omitempty"`
+}
+
+func response(w http.ResponseWriter, code int, payload Payload) {
+	w.WriteHeader(code)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
