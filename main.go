@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/smtp"
 	"os"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/tebeka/selenium"
 	"github.com/tebeka/selenium/chrome"
+
+	_ "github.com/joho/godotenv/autoload"
 )
 
 const (
@@ -38,18 +41,18 @@ func (s *Scheduler) Start() {
 					if event.Action == "IN" {
 						if err := Punch(&user.Credentials, &Script{In: true}); err != nil {
 							logger.Println(err.Error())
-							return
+							continue
 						}
-						s.Users[userIndex].Events[eventIndex].Success = true
-						logger.Printf("%s: IN", user.Credentials.Username)
 					}
 					if event.Action == "OUT" {
 						if err := Punch(&user.Credentials, &Script{Out: true}); err != nil {
 							logger.Println(err.Error())
-							return
+							continue
 						}
-						s.Users[userIndex].Events[eventIndex].Success = true
-						logger.Printf("%s: OUT", user.Credentials.Username)
+					}
+					s.Users[userIndex].Events[eventIndex].Success = true
+					if err := Notify(user.Email, event.Action); err != nil {
+						logger.Println(err.Error())
 					}
 				}
 			}
@@ -116,6 +119,9 @@ func AttachHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		scheduler.Users[u.Credentials.Username] = u
+		if err := Notify(u.Email, "ATTACHED"); err != nil {
+			logger.Println(err.Error())
+		}
 		response(w, http.StatusOK, Payload{Data: scheduler.Users[u.Credentials.Username].Events})
 		return
 	}
@@ -142,6 +148,9 @@ func DetachHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	delete(scheduler.Users, u.Credentials.Username)
+	if err := Notify(u.Email, "DETACHED"); err != nil {
+		logger.Println(err.Error())
+	}
 	response(w, http.StatusOK, Payload{})
 }
 
@@ -217,6 +226,24 @@ func Punch(c *Credentials, s *Script) error {
 	}
 
 	return nil
+}
+
+func Notify(to string, body string) error {
+	addr := "smtp.gmail.com:587"
+	host := "smtp.gmail.com"
+	identity := ""
+	from := os.Getenv("SMTP_USERNAME")
+	password := os.Getenv("SMTP_PASSWORD")
+	subject := "FemasHR Puncher"
+	msg := "From:" + from + "\r\n" + "To:" + to + "\r\n" + "Subject:" + subject + "\r\n" + body
+
+	return smtp.SendMail(
+		addr,
+		smtp.PlainAuth(identity, from, password, host),
+		from,
+		[]string{to},
+		[]byte(msg),
+	)
 }
 
 type Payload struct {
