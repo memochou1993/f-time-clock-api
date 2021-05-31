@@ -50,6 +50,12 @@ func (s *Scheduler) Start() {
 							continue
 						}
 					}
+					if event.Action == "TEST" {
+						if err := Punch(&user.Credentials, &Script{}); err != nil {
+							logger.Println(err.Error())
+							continue
+						}
+					}
 					s.Users[userIndex].Events[eventIndex].Success = true
 					if err := Notify(user.Email, event.Action); err != nil {
 						logger.Println(err.Error())
@@ -207,6 +213,26 @@ func Punch(c *Credentials, s *Script) error {
 	}
 	if err := loginButton.Click(); err != nil {
 		return err
+	}
+
+	if s.In {
+		punchButton, err := wd.FindElement(selenium.ByCSSSelector, "#clock_listing tr:nth-child(1) input")
+		if err != nil {
+			return err
+		}
+		if err := punchButton.Click(); err != nil {
+			return err
+		}
+	}
+
+	if s.Out {
+		punchButton, err := wd.FindElement(selenium.ByCSSSelector, "#clock_listing tr:nth-child(2) input")
+		if err != nil {
+			return err
+		}
+		if err := punchButton.Click(); err != nil {
+			return err
+		}
 	}
 
 	menu, err := wd.FindElement(selenium.ByCSSSelector, "#login_user")
