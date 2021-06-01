@@ -17,11 +17,12 @@ import (
 )
 
 const (
-	Endpoint = "https://femascloud.com"
+	Scheme = "https"
+	Host   = "femascloud.com"
 )
 
 const (
-	ActionTry      = "TRY"
+	ActionTest     = "TEST"
 	ActionPunchIn  = "PUNCH_IN"
 	ActionPunchOut = "PUNCH_OUT"
 )
@@ -88,7 +89,7 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
-		if err := u.Execute(ActionTry); err != nil {
+		if err := u.Execute(ActionTest); err != nil {
 			Response(w, http.StatusInternalServerError, Payload{Error: err.Error()})
 			return
 		}
@@ -123,6 +124,7 @@ func Detach(w http.ResponseWriter, r *http.Request) {
 }
 
 type User struct {
+	ID          string      `json:"id"`
 	Company     string      `json:"company"`
 	Cookie      string      `json:"-"`
 	Credentials Credentials `json:"credentials"`
@@ -149,16 +151,26 @@ func (u *User) Execute(action string) error {
 	if err := u.Login(); err != nil {
 		return err
 	}
-	if action == ActionTry {
+	if action == ActionTest {
 		if err := u.AddEvent(); err != nil {
 			return err
 		}
 	}
 	if action == ActionPunchIn {
-		// TODO
+		if err := u.PunchIn(); err != nil {
+			return err
+		}
+		if err := u.ListStatus(); err != nil {
+			return err
+		}
 	}
 	if action == ActionPunchOut {
-		// TODO
+		if err := u.PunchOut(); err != nil {
+			return err
+		}
+		if err := u.ListStatus(); err != nil {
+			return err
+		}
 	}
 	if err := u.Logout(); err != nil {
 		return err
@@ -167,7 +179,7 @@ func (u *User) Execute(action string) error {
 }
 
 func (u *User) GetCookie() error {
-	resp, err := http.Get(fmt.Sprintf("%s/%s/%s", Endpoint, u.Company, "/"))
+	resp, err := http.Get(fmt.Sprintf("%s://%s/%s/%s", Scheme, Host, u.Company, "/"))
 	if err != nil {
 		return err
 	}
@@ -183,11 +195,31 @@ func (u *User) Login() error {
 	params.Add("data[remember]", `0`)
 	body := strings.NewReader(params.Encode())
 
-	return u.Request(http.MethodPost, "accounts/login", body)
+	return u.Request("accounts/login", body)
 }
 
 func (u *User) Logout() error {
-	return u.Request(http.MethodPost, "accounts/logout", nil)
+	return u.Request("accounts/logout", nil)
+}
+
+func (u *User) PunchIn() error {
+	params := url.Values{}
+	params.Add("_method", `POST`)
+	params.Add("data[ClockRecord][user_id]", u.ID)
+	params.Add("data[AttRecord][user_id]", u.ID)
+	params.Add("data[ClockRecord][shift_id]", `2`)
+	params.Add("data[ClockRecord][period]", `1`)
+	params.Add("data[ClockRecord][clock_type]", `S`)
+	params.Add("data[ClockRecord][latitude]", ``)
+	params.Add("data[ClockRecord][longitude]", ``)
+	body := strings.NewReader(params.Encode())
+
+	return u.Request("users/clock_listing", body)
+}
+
+func (u *User) PunchOut() error {
+	// TODO
+	return nil
 }
 
 func (u *User) AddEvent() error {
@@ -202,32 +234,35 @@ func (u *User) AddEvent() error {
 	params.Add("data[save]", `確認`)
 	body := strings.NewReader(params.Encode())
 
-	return u.Request(http.MethodPost, "users/calendar_event", body)
+	return u.Request("users/calendar_event", body)
 }
 
-func (u *User) Request(method string, path string, body io.Reader) error {
-	url := fmt.Sprintf("%s/%s/%s", Endpoint, u.Company, path)
-	req, err := http.NewRequest(method, url, body)
+func (u *User) ListStatus() error {
+	return u.Request("users/att_status_listing", nil)
+}
+
+func (u *User) Request(path string, body io.Reader) error {
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s://%s/%s/%s", Scheme, Host, u.Company, path), body)
 	if err != nil {
 		return err
 	}
+	req.Host = Host
+	req.Header.Set("Accept", "text/javascript, text/html, application/xml, text/xml, */*")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Accept-Language", "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7")
 	req.Header.Set("Connection", "keep-alive")
-	req.Header.Set("Cache-Control", "max-age=0")
-	req.Header.Set("Sec-Ch-Ua", "\" Not A;Brand\";v=\"99\", \"Chromium\";v=\"90\", \"Google Chrome\";v=\"90\"")
-	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
-	req.Header.Set("Origin", Endpoint)
-	req.Header.Set("Upgrade-Insecure-Requests", "1")
-	req.Header.Set("Dnt", "1")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-User", "?1")
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Referer", url)
-	req.Header.Set("Accept-Language", "zh-TW,zh;q=0.9,en;q=0.8")
 	req.Header.Set("Cookie", u.Cookie)
+	req.Header.Set("Origin", fmt.Sprintf("%s://%s", Scheme, Host))
+	req.Header.Set("Referer", fmt.Sprintf("%s://%s/%s/%s", Scheme, Host, u.Company, "users/main"))
+	req.Header.Set("Sec-Ch-Ua", "\" Not;A Brand\";v=\"99\", \"Google Chrome\";v=\"91\", \"Chromium\";v=\"91\"")
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36")
+	req.Header.Set("X-Prototype-Version", "1.7")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
