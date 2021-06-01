@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
 	"io"
 	"log"
 	"net/http"
@@ -12,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	_ "github.com/joho/godotenv/autoload"
 )
 
@@ -22,9 +23,9 @@ const (
 )
 
 const (
-	ActionTest     = "TEST"
-	ActionPunchIn  = "PUNCH_IN"
-	ActionPunchOut = "PUNCH_OUT"
+	ActionCreateEvent = "CREATE_EVENT"
+	ActionPunchIn     = "PUNCH_IN"
+	ActionPunchOut    = "PUNCH_OUT"
 )
 
 var (
@@ -46,10 +47,8 @@ func (s *Scheduler) Start() {
 					s.Users[ui].Events[ei].Dispatched = true
 					if err := user.Execute(event.Action); err != nil {
 						Log(err.Error())
+						go Notify(user.Email, fmt.Sprintf("Error: %s", err.Error()))
 						continue
-					}
-					if err := Notify(user.Email, fmt.Sprint(event.Action)); err != nil {
-						Log(err.Error())
 					}
 				}
 			}
@@ -88,10 +87,6 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
-		if err := u.Execute(ActionTest); err != nil {
-			Response(w, http.StatusInternalServerError, Payload{Error: err.Error()})
-			return
-		}
 		scheduler.Users[u.Credentials.Username] = u
 		Response(w, http.StatusOK, Payload{Data: User{Events: u.Events}})
 		return
@@ -150,10 +145,11 @@ func (u *User) Execute(action string) error {
 		return err
 	}
 	switch action {
-	case ActionTest:
-		if err := u.AddEvent(); err != nil {
+	case ActionCreateEvent:
+		if err := u.CreateEvent(); err != nil {
 			return err
 		}
+		go Notify(u.Email, fmt.Sprintf("Event created successfully!"))
 	case ActionPunchIn:
 		if err := u.PunchIn(); err != nil {
 			return err
@@ -161,6 +157,7 @@ func (u *User) Execute(action string) error {
 		if err := u.ListStatus(); err != nil {
 			return err
 		}
+		go Notify(u.Email, fmt.Sprintf("Punched in successfully!"))
 	case ActionPunchOut:
 		if err := u.PunchOut(); err != nil {
 			return err
@@ -168,6 +165,7 @@ func (u *User) Execute(action string) error {
 		if err := u.ListStatus(); err != nil {
 			return err
 		}
+		go Notify(u.Email, fmt.Sprintf("Punched out successfully!"))
 	}
 	if err := u.Logout(); err != nil {
 		return err
@@ -229,7 +227,7 @@ func (u *User) PunchOut() error {
 	return u.Request("users/clock_listing", body)
 }
 
-func (u *User) AddEvent() error {
+func (u *User) CreateEvent() error {
 	params := url.Values{}
 	params.Add("_method", `POST`)
 	params.Add("data[User][date]", time.Now().In(location).Format("2006-01-02"))
@@ -281,17 +279,31 @@ func (u *User) Request(path string, body io.Reader) error {
 	return nil
 }
 
-func Notify(to string, body string) error {
+func Notify(to string, body string) {
 	addr := "smtp.gmail.com:587"
 	host := "smtp.gmail.com"
 	identity := ""
 	from := os.Getenv("SMTP_USERNAME")
 	password := os.Getenv("SMTP_PASSWORD")
 	subject := "FemasHR Puncher"
-	msg := "From:" + from + "\r\n" + "To:" + to + "\r\n" + "Subject:" + subject + "\r\n" + body
 	auth := smtp.PlainAuth(identity, from, password, host)
 
-	return smtp.SendMail(addr, auth, from, []string{to}, []byte(msg))
+	header := make(map[string]string)
+	header["From"] = from
+	header["To"] = to
+	header["Subject"] = subject
+	header["MIME-Version"] = "1.0"
+	header["Content-Type"] = "text/plain; charset=\"utf-8\""
+	header["Content-Transfer-Encoding"] = "base64"
+	message := ""
+	for k, v := range header {
+		message += fmt.Sprintf("%s: %s\r\n", k, v)
+	}
+	message += base64.StdEncoding.EncodeToString([]byte("\r\n" + body + "\r\n"))
+
+	if err := smtp.SendMail(addr, auth, from, []string{to}, []byte(message)); err != nil {
+		Log(err.Error())
+	}
 }
 
 type Payload struct {
