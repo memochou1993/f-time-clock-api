@@ -5,7 +5,19 @@ FemasHR Puncher
 
 ## Attach
 
+Attch a user to scheduler.
+
+### Endpoint
+
 `POST` <https://femashr-puncher.epoch.tw/api/attach>
+
+### Action
+
+| Action      | Description                 |
+| ----------- | --------------------------- |
+| `TEST`      | create an event to calendar |
+| `PUNCH_IN`  | punch in                    |
+| `PUNCH_OUT` | punch out                   |
 
 ### Request
 
@@ -28,6 +40,10 @@ FemasHR Puncher
 ```
 
 ## Detach
+
+Detach a user from scheduler.
+
+### Endpoint
 
 `POST` <https://femashr-puncher.epoch.tw/api/detach>
 
