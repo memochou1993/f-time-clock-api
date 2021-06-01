@@ -174,7 +174,7 @@ func (u *User) Execute(action string) error {
 		if err := u.CreateEvent(u.Code); err != nil {
 			return err
 		}
-		go Notify(u.Email, fmt.Sprintf("Event created successfully!"))
+		go Notify(u.Email, fmt.Sprintf("Verification code has been sent to your calendar!"))
 	case ActionPunchIn:
 		if err := u.PunchIn(); err != nil {
 			return err
@@ -203,7 +203,7 @@ func (u *User) SetCookie() error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer CloseBody(resp.Body)
 	u.Cookie = resp.Header.Get("Set-Cookie")
 	return nil
 }
@@ -299,7 +299,7 @@ func (u *User) Request(path string, body io.Reader) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer CloseBody(resp.Body)
 
 	return nil
 }
@@ -355,4 +355,10 @@ func Response(w http.ResponseWriter, code int, payload Payload) {
 func Log(v interface{}) {
 	log.Println(v)
 	logger.Println(v)
+}
+
+func CloseBody(closer io.ReadCloser) {
+	if err := closer.Close(); err != nil {
+		log.Fatal(err.Error())
+	}
 }
