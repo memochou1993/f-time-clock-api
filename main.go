@@ -93,7 +93,7 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		scheduler.Users[u.Credentials.Username] = u
-		Response(w, http.StatusOK, Payload{Data: scheduler.Users[u.Credentials.Username].Events})
+		Response(w, http.StatusOK, Payload{Data: User{Events: u.Events}})
 		return
 	}
 	if scheduler.Users[u.Credentials.Username].Credentials.Password != u.Credentials.Password {
@@ -101,7 +101,7 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	scheduler.Users[u.Credentials.Username] = u
-	Response(w, http.StatusOK, Payload{Data: scheduler.Users[u.Credentials.Username].Events})
+	Response(w, http.StatusOK, Payload{Data: User{Events: u.Events}})
 }
 
 func Detach(w http.ResponseWriter, r *http.Request) {
@@ -123,22 +123,22 @@ func Detach(w http.ResponseWriter, r *http.Request) {
 }
 
 type User struct {
-	ID          string      `json:"id"`
-	Company     string      `json:"company"`
-	Cookie      string      `json:"-"`
-	Credentials Credentials `json:"credentials"`
-	Email       string      `json:"email"`
-	Events      []Event     `json:"events"`
+	ID          string       `json:"id,omitempty"`
+	Company     string       `json:"company,omitempty"`
+	Cookie      string       `json:"-"`
+	Credentials *Credentials `json:"credentials,omitempty"`
+	Email       string       `json:"email,omitempty"`
+	Events      []Event      `json:"events,omitempty"`
 }
 
 type Credentials struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
 }
 
 type Event struct {
-	Action     string    `json:"action"`
-	Date       time.Time `json:"date"`
+	Action     string    `json:"action,omitempty"`
+	Date       time.Time `json:"date,omitempty"`
 	Dispatched bool      `json:"-"`
 }
 
