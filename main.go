@@ -35,6 +35,116 @@ var (
 	location  = time.FixedZone("UTC+8", 8*60*60)
 )
 
+func init() {
+	file, err := os.OpenFile("./logs/log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	logger = log.New(file, "", log.Ldate|log.Ltime)
+}
+
+func main() {
+	go scheduler.Start()
+	go scheduler.Prune()
+
+	r := mux.NewRouter()
+	r.HandleFunc("/api/attach", Attach).Methods(http.MethodPost)
+	r.HandleFunc("/api/detach", Detach).Methods(http.MethodPost)
+	r.HandleFunc("/api/verify", Verify).Methods(http.MethodPost)
+
+	log.Fatal(http.ListenAndServe(":80", r))
+}
+
+func Attach(w http.ResponseWriter, r *http.Request) {
+	u := &User{}
+	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
+		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
+		return
+	}
+	if u.Credentials == nil {
+		Response(w, http.StatusBadRequest, Payload{})
+		return
+	}
+	if u.Credentials.Username == "" || u.Credentials.Password == "" {
+		Response(w, http.StatusBadRequest, Payload{})
+		return
+	}
+	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
+		u.Code = NewCode()
+		if err := u.Execute(ActionVerify); err != nil {
+			Response(w, http.StatusInternalServerError, Payload{Error: err.Error()})
+			return
+		}
+		scheduler.Users[u.Credentials.Username] = u
+		Response(w, http.StatusCreated, Payload{})
+		return
+	}
+	if !scheduler.Users[u.Credentials.Username].Verified {
+		Response(w, http.StatusForbidden, Payload{})
+		return
+	}
+	if scheduler.Users[u.Credentials.Username].Code != u.Code {
+		Response(w, http.StatusUnauthorized, Payload{})
+		return
+	}
+	scheduler.Users[u.Credentials.Username].Email = u.Email
+	scheduler.Users[u.Credentials.Username].Events = u.Events
+	Response(w, http.StatusOK, Payload{Data: User{Events: u.Events}})
+}
+
+func Detach(w http.ResponseWriter, r *http.Request) {
+	u := &User{}
+	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
+		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
+		return
+	}
+	if u.Credentials == nil {
+		Response(w, http.StatusBadRequest, Payload{})
+		return
+	}
+	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
+		Response(w, http.StatusNotFound, Payload{})
+		return
+	}
+	if scheduler.Users[u.Credentials.Username].Code == u.Code {
+		delete(scheduler.Users, u.Credentials.Username)
+		Response(w, http.StatusNoContent, nil)
+		return
+	}
+	if scheduler.Users[u.Credentials.Username].Credentials.Password == u.Credentials.Password {
+		delete(scheduler.Users, u.Credentials.Username)
+		Response(w, http.StatusNoContent, nil)
+		return
+	}
+	Response(w, http.StatusUnauthorized, Payload{})
+}
+
+func Verify(w http.ResponseWriter, r *http.Request) {
+	u := &User{}
+	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
+		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
+		return
+	}
+	if u.Credentials == nil {
+		Response(w, http.StatusBadRequest, Payload{})
+		return
+	}
+	if u.Code == "" {
+		Response(w, http.StatusBadRequest, Payload{})
+		return
+	}
+	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
+		Response(w, http.StatusNotFound, Payload{})
+		return
+	}
+	if scheduler.Users[u.Credentials.Username].Code != u.Code {
+		Response(w, http.StatusUnauthorized, Payload{})
+		return
+	}
+	scheduler.Users[u.Credentials.Username].Verified = true
+	Response(w, http.StatusOK, Payload{})
+}
+
 type Scheduler struct {
 	Users map[string]*User
 }
@@ -76,70 +186,6 @@ func NewScheduler() *Scheduler {
 	}
 }
 
-func init() {
-	file, err := os.OpenFile("./logs/log.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
-	logger = log.New(file, "", log.Ldate|log.Ltime)
-}
-
-func main() {
-	go scheduler.Start()
-	go scheduler.Prune()
-
-	r := mux.NewRouter()
-	r.HandleFunc("/api/attach", Attach).Methods(http.MethodPost)
-	r.HandleFunc("/api/detach", Detach).Methods(http.MethodPost)
-
-	log.Fatal(http.ListenAndServe(":80", r))
-}
-
-func Attach(w http.ResponseWriter, r *http.Request) {
-	u := &User{}
-	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
-		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
-		return
-	}
-	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
-		u.Code = NewCode()
-		if err := u.Execute(ActionVerify); err != nil {
-			Response(w, http.StatusInternalServerError, Payload{Error: err.Error()})
-			return
-		}
-		scheduler.Users[u.Credentials.Username] = u
-		Response(w, http.StatusOK, Payload{Data: User{Events: u.Events}})
-		return
-	}
-	if scheduler.Users[u.Credentials.Username].Credentials.Password != u.Credentials.Password {
-		Response(w, http.StatusUnauthorized, Payload{})
-		return
-	}
-	if scheduler.Users[u.Credentials.Username].Code == u.Code {
-		scheduler.Users[u.Credentials.Username].Verified = true
-	}
-	scheduler.Users[u.Credentials.Username].Events = u.Events
-	Response(w, http.StatusOK, Payload{Data: User{Events: u.Events}})
-}
-
-func Detach(w http.ResponseWriter, r *http.Request) {
-	u := &User{}
-	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
-		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
-		return
-	}
-	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
-		Response(w, http.StatusNotFound, Payload{})
-		return
-	}
-	if scheduler.Users[u.Credentials.Username].Credentials.Password != u.Credentials.Password {
-		Response(w, http.StatusUnauthorized, Payload{})
-		return
-	}
-	delete(scheduler.Users, u.Credentials.Username)
-	Response(w, http.StatusOK, Payload{})
-}
-
 type User struct {
 	ID          string       `json:"id,omitempty"`
 	Code        string       `json:"code,omitempty"`
@@ -147,7 +193,7 @@ type User struct {
 	Cookie      string       `json:"-"`
 	Credentials *Credentials `json:"credentials,omitempty"`
 	Email       string       `json:"email,omitempty"`
-	Events      []Event      `json:"events,omitempty"`
+	Events      []Event      `json:"events"`
 	Verified    bool         `json:"-"`
 }
 
@@ -174,7 +220,7 @@ func (u *User) Execute(action string) error {
 		if err := u.CreateEvent(u.Code); err != nil {
 			return err
 		}
-		go Notify(u.Email, fmt.Sprintf("Verification code has been sent to your calendar!"))
+		go Notify(u.Email, fmt.Sprintf("Code has been sent to your calendar!"))
 	case ActionPunchIn:
 		if err := u.PunchIn(); err != nil {
 			return err
@@ -305,6 +351,10 @@ func (u *User) Request(path string, body io.Reader) error {
 }
 
 func Notify(to string, body string) {
+	if to == "" || body == "" {
+		return
+	}
+
 	addr := "smtp.gmail.com:587"
 	host := "smtp.gmail.com"
 	identity := ""
@@ -331,6 +381,21 @@ func Notify(to string, body string) {
 	}
 }
 
+type Payload struct {
+	Data  interface{} `json:"data,omitempty"`
+	Error string      `json:"error,omitempty"`
+}
+
+func Response(w http.ResponseWriter, code int, v interface{}) {
+	w.WriteHeader(code)
+	if v == nil {
+		return
+	}
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func NewCode() string {
 	rand.Seed(time.Now().Unix())
 	code := ""
@@ -340,25 +405,13 @@ func NewCode() string {
 	return code
 }
 
-type Payload struct {
-	Data  interface{} `json:"data,omitempty"`
-	Error string      `json:"error,omitempty"`
-}
-
-func Response(w http.ResponseWriter, code int, payload Payload) {
-	w.WriteHeader(code)
-	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+func CloseBody(closer io.ReadCloser) {
+	if err := closer.Close(); err != nil {
+		log.Fatal(err.Error())
 	}
 }
 
 func Log(v interface{}) {
 	log.Println(v)
 	logger.Println(v)
-}
-
-func CloseBody(closer io.ReadCloser) {
-	if err := closer.Close(); err != nil {
-		log.Fatal(err.Error())
-	}
 }
