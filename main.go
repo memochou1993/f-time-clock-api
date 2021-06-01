@@ -24,9 +24,9 @@ const (
 )
 
 const (
-	ActionVerify   = "VERIFY"
-	ActionPunchIn  = "PUNCH_IN"
-	ActionPunchOut = "PUNCH_OUT"
+	ActionIssueToken = "ISSUE_TOKEN"
+	ActionPunchIn    = "PUNCH_IN"
+	ActionPunchOut   = "PUNCH_OUT"
 )
 
 var (
@@ -70,12 +70,11 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
-		u.Token = NewToken()
 		if u.Credentials.Password == "" {
 			Response(w, http.StatusBadRequest, nil)
 			return
 		}
-		if err := u.Execute(ActionVerify); err != nil {
+		if err := u.Execute(ActionIssueToken); err != nil {
 			Response(w, http.StatusInternalServerError, Payload{Error: err.Error()})
 			return
 		}
@@ -228,11 +227,12 @@ func (u *User) Execute(action string) error {
 		return err
 	}
 	switch action {
-	case ActionVerify:
+	case ActionIssueToken:
+		u.Token = NewToken()
 		if err := u.CreateEvent(u.Token); err != nil {
 			return err
 		}
-		go Notify(u.Email, fmt.Sprintf("Token has been sent to your calendar!"))
+		go Notify(u.Email, fmt.Sprintf("A new token has been issued. Please check your calendar."))
 	case ActionPunchIn:
 		if err := u.PunchIn(); err != nil {
 			return err
