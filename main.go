@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/mux"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/smtp"
 	"net/url"
@@ -23,9 +24,9 @@ const (
 )
 
 const (
-	ActionCreateEvent = "CREATE_EVENT"
-	ActionPunchIn     = "PUNCH_IN"
-	ActionPunchOut    = "PUNCH_OUT"
+	ActionVerify   = "VERIFY"
+	ActionPunchIn  = "PUNCH_IN"
+	ActionPunchOut = "PUNCH_OUT"
 )
 
 var (
@@ -35,12 +36,15 @@ var (
 )
 
 type Scheduler struct {
-	Users map[string]User
+	Users map[string]*User
 }
 
 func (s *Scheduler) Start() {
 	for range time.Tick(time.Minute) {
 		for ui, user := range s.Users {
+			if !user.Verified {
+				continue
+			}
 			for ei, event := range user.Events {
 				duration := time.Now().Sub(event.Date).Seconds()
 				if !event.Dispatched && duration >= 0 && duration < 60 {
@@ -56,9 +60,19 @@ func (s *Scheduler) Start() {
 	}
 }
 
+func (s *Scheduler) Prune() {
+	for range time.Tick(10 * time.Minute) {
+		for _, user := range s.Users {
+			if !user.Verified {
+				delete(scheduler.Users, user.Credentials.Username)
+			}
+		}
+	}
+}
+
 func NewScheduler() *Scheduler {
 	return &Scheduler{
-		Users: make(map[string]User),
+		Users: make(map[string]*User),
 	}
 }
 
@@ -72,6 +86,7 @@ func init() {
 
 func main() {
 	go scheduler.Start()
+	go scheduler.Prune()
 
 	r := mux.NewRouter()
 	r.HandleFunc("/api/attach", Attach).Methods(http.MethodPost)
@@ -81,12 +96,17 @@ func main() {
 }
 
 func Attach(w http.ResponseWriter, r *http.Request) {
-	var u User
-	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	u := &User{}
+	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
+		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
 		return
 	}
 	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
+		u.Code = NewCode()
+		if err := u.Execute(ActionVerify); err != nil {
+			Response(w, http.StatusInternalServerError, Payload{Error: err.Error()})
+			return
+		}
 		scheduler.Users[u.Credentials.Username] = u
 		Response(w, http.StatusOK, Payload{Data: User{Events: u.Events}})
 		return
@@ -95,14 +115,17 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 		Response(w, http.StatusUnauthorized, Payload{})
 		return
 	}
-	scheduler.Users[u.Credentials.Username] = u
+	if scheduler.Users[u.Credentials.Username].Code == u.Code {
+		scheduler.Users[u.Credentials.Username].Verified = true
+	}
+	scheduler.Users[u.Credentials.Username].Events = u.Events
 	Response(w, http.StatusOK, Payload{Data: User{Events: u.Events}})
 }
 
 func Detach(w http.ResponseWriter, r *http.Request) {
-	var u User
-	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	u := &User{}
+	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
+		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
 		return
 	}
 	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
@@ -119,11 +142,13 @@ func Detach(w http.ResponseWriter, r *http.Request) {
 
 type User struct {
 	ID          string       `json:"id,omitempty"`
+	Code        string       `json:"code,omitempty"`
 	Company     string       `json:"company,omitempty"`
 	Cookie      string       `json:"-"`
 	Credentials *Credentials `json:"credentials,omitempty"`
 	Email       string       `json:"email,omitempty"`
 	Events      []Event      `json:"events,omitempty"`
+	Verified    bool         `json:"-"`
 }
 
 type Credentials struct {
@@ -145,8 +170,8 @@ func (u *User) Execute(action string) error {
 		return err
 	}
 	switch action {
-	case ActionCreateEvent:
-		if err := u.CreateEvent(); err != nil {
+	case ActionVerify:
+		if err := u.CreateEvent(u.Code); err != nil {
 			return err
 		}
 		go Notify(u.Email, fmt.Sprintf("Event created successfully!"))
@@ -227,7 +252,7 @@ func (u *User) PunchOut() error {
 	return u.Request("users/clock_listing", body)
 }
 
-func (u *User) CreateEvent() error {
+func (u *User) CreateEvent(event string) error {
 	params := url.Values{}
 	params.Add("_method", `POST`)
 	params.Add("data[User][date]", time.Now().In(location).Format("2006-01-02"))
@@ -236,7 +261,7 @@ func (u *User) CreateEvent() error {
 	params.Add("data[UserEvent][end_time][hour]", `18`)
 	params.Add("data[UserEvent][end_time][min]", `0`)
 	params.Add("data[UserEvent][public]", `0`)
-	params.Add("data[UserEvent][event]", ``)
+	params.Add("data[UserEvent][event]", event)
 	params.Add("data[save]", `確認`)
 	body := strings.NewReader(params.Encode())
 
@@ -304,6 +329,15 @@ func Notify(to string, body string) {
 	if err := smtp.SendMail(addr, auth, from, []string{to}, []byte(message)); err != nil {
 		Log(err.Error())
 	}
+}
+
+func NewCode() string {
+	rand.Seed(time.Now().Unix())
+	code := ""
+	for i := 0; i < 6; i++ {
+		code += string('A' + rune(rand.Intn(26)))
+	}
+	return code
 }
 
 type Payload struct {
