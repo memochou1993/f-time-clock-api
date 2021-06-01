@@ -70,7 +70,7 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
-		u.Code = NewCode()
+		u.Token = NewToken()
 		if err := u.Execute(ActionVerify); err != nil {
 			Response(w, http.StatusInternalServerError, Payload{Error: err.Error()})
 			return
@@ -83,7 +83,7 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 		Response(w, http.StatusForbidden, Payload{})
 		return
 	}
-	if scheduler.Users[u.Credentials.Username].Code != u.Code {
+	if scheduler.Users[u.Credentials.Username].Token != u.Token {
 		Response(w, http.StatusUnauthorized, Payload{})
 		return
 	}
@@ -106,7 +106,7 @@ func Detach(w http.ResponseWriter, r *http.Request) {
 		Response(w, http.StatusNotFound, Payload{})
 		return
 	}
-	if scheduler.Users[u.Credentials.Username].Code == u.Code {
+	if scheduler.Users[u.Credentials.Username].Token == u.Token {
 		delete(scheduler.Users, u.Credentials.Username)
 		Response(w, http.StatusNoContent, nil)
 		return
@@ -129,7 +129,7 @@ func Verify(w http.ResponseWriter, r *http.Request) {
 		Response(w, http.StatusBadRequest, Payload{})
 		return
 	}
-	if u.Code == "" {
+	if u.Token == "" {
 		Response(w, http.StatusBadRequest, Payload{})
 		return
 	}
@@ -137,7 +137,7 @@ func Verify(w http.ResponseWriter, r *http.Request) {
 		Response(w, http.StatusNotFound, Payload{})
 		return
 	}
-	if scheduler.Users[u.Credentials.Username].Code != u.Code {
+	if scheduler.Users[u.Credentials.Username].Token != u.Token {
 		Response(w, http.StatusUnauthorized, Payload{})
 		return
 	}
@@ -188,12 +188,12 @@ func NewScheduler() *Scheduler {
 
 type User struct {
 	ID          string       `json:"id,omitempty"`
-	Code        string       `json:"code,omitempty"`
 	Company     string       `json:"company,omitempty"`
 	Cookie      string       `json:"-"`
 	Credentials *Credentials `json:"credentials,omitempty"`
 	Email       string       `json:"email,omitempty"`
 	Events      []Event      `json:"events"`
+	Token       string       `json:"token,omitempty"`
 	Verified    bool         `json:"-"`
 }
 
@@ -217,10 +217,10 @@ func (u *User) Execute(action string) error {
 	}
 	switch action {
 	case ActionVerify:
-		if err := u.CreateEvent(u.Code); err != nil {
+		if err := u.CreateEvent(u.Token); err != nil {
 			return err
 		}
-		go Notify(u.Email, fmt.Sprintf("Code has been sent to your calendar!"))
+		go Notify(u.Email, fmt.Sprintf("Token has been sent to your calendar!"))
 	case ActionPunchIn:
 		if err := u.PunchIn(); err != nil {
 			return err
@@ -396,13 +396,13 @@ func Response(w http.ResponseWriter, code int, v interface{}) {
 	}
 }
 
-func NewCode() string {
+func NewToken() string {
 	rand.Seed(time.Now().Unix())
-	code := ""
-	for i := 0; i < 6; i++ {
-		code += string('A' + rune(rand.Intn(26)))
+	token := ""
+	for i := 0; i < 8; i++ {
+		token += string('A' + rune(rand.Intn(26)))
 	}
-	return code
+	return token
 }
 
 func CloseBody(closer io.ReadCloser) {
