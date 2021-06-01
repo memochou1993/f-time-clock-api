@@ -215,8 +215,18 @@ func (u *User) PunchIn() error {
 }
 
 func (u *User) PunchOut() error {
-	// TODO
-	return nil
+	params := url.Values{}
+	params.Add("_method", `POST`)
+	params.Add("data[ClockRecord][user_id]", u.ID)
+	params.Add("data[AttRecord][user_id]", u.ID)
+	params.Add("data[ClockRecord][shift_id]", `2`)
+	params.Add("data[ClockRecord][period]", `1`)
+	params.Add("data[ClockRecord][clock_type]", `E`)
+	params.Add("data[ClockRecord][latitude]", ``)
+	params.Add("data[ClockRecord][longitude]", ``)
+	body := strings.NewReader(params.Encode())
+
+	return u.Request("users/clock_listing", body)
 }
 
 func (u *User) AddEvent() error {
