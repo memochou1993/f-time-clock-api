@@ -39,16 +39,15 @@ type Scheduler struct {
 
 func (s *Scheduler) Start() {
 	for range time.Tick(time.Minute) {
-		for userIndex, user := range s.Users {
-			for eventIndex, event := range user.Events {
+		for ui, user := range s.Users {
+			for ei, event := range user.Events {
 				duration := time.Now().Sub(event.Date).Seconds()
 				if !event.Dispatched && duration >= 0 && duration < 60 {
-					s.Users[userIndex].Events[eventIndex].Dispatched = true
+					s.Users[ui].Events[ei].Dispatched = true
 					if err := user.Execute(event.Action); err != nil {
 						Log(err.Error())
 						continue
 					}
-					s.Users[userIndex].Events[eventIndex].Success = true
 					if err := Notify(user.Email, fmt.Sprint(event.Action)); err != nil {
 						Log(err.Error())
 					}
@@ -141,30 +140,28 @@ type Event struct {
 	Action     string    `json:"action"`
 	Date       time.Time `json:"date"`
 	Dispatched bool      `json:"-"`
-	Success    bool      `json:"-"`
 }
 
 func (u *User) Execute(action string) error {
-	if err := u.GetCookie(); err != nil {
+	if err := u.SetCookie(); err != nil {
 		return err
 	}
 	if err := u.Login(); err != nil {
 		return err
 	}
-	if action == ActionTest {
+	switch action {
+	case ActionTest:
 		if err := u.AddEvent(); err != nil {
 			return err
 		}
-	}
-	if action == ActionPunchIn {
+	case ActionPunchIn:
 		if err := u.PunchIn(); err != nil {
 			return err
 		}
 		if err := u.ListStatus(); err != nil {
 			return err
 		}
-	}
-	if action == ActionPunchOut {
+	case ActionPunchOut:
 		if err := u.PunchOut(); err != nil {
 			return err
 		}
@@ -178,8 +175,8 @@ func (u *User) Execute(action string) error {
 	return nil
 }
 
-func (u *User) GetCookie() error {
-	resp, err := http.Get(fmt.Sprintf("%s://%s/%s/%s", Scheme, Host, u.Company, "/"))
+func (u *User) SetCookie() error {
+	resp, err := http.Get(fmt.Sprintf("%s://%s/%s/", Scheme, Host, u.Company))
 	if err != nil {
 		return err
 	}
@@ -224,6 +221,7 @@ func (u *User) PunchOut() error {
 
 func (u *User) AddEvent() error {
 	params := url.Values{}
+	params.Add("_method", `POST`)
 	params.Add("data[User][date]", time.Now().In(location).Format("2006-01-02"))
 	params.Add("data[UserEvent][start_time][hour]", `08`)
 	params.Add("data[UserEvent][start_time][min]", `0`)
@@ -254,7 +252,7 @@ func (u *User) Request(path string, body io.Reader) error {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Cookie", u.Cookie)
 	req.Header.Set("Origin", fmt.Sprintf("%s://%s", Scheme, Host))
-	req.Header.Set("Referer", fmt.Sprintf("%s://%s/%s/%s", Scheme, Host, u.Company, "users/main"))
+	req.Header.Set("Referer", fmt.Sprintf("%s://%s/%s/users/main", Scheme, Host, u.Company))
 	req.Header.Set("Sec-Ch-Ua", "\" Not;A Brand\";v=\"99\", \"Google Chrome\";v=\"91\", \"Chromium\";v=\"91\"")
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
 	req.Header.Set("Sec-Fetch-Dest", "empty")
@@ -281,14 +279,9 @@ func Notify(to string, body string) error {
 	password := os.Getenv("SMTP_PASSWORD")
 	subject := "FemasHR Puncher"
 	msg := "From:" + from + "\r\n" + "To:" + to + "\r\n" + "Subject:" + subject + "\r\n" + body
+	auth := smtp.PlainAuth(identity, from, password, host)
 
-	return smtp.SendMail(
-		addr,
-		smtp.PlainAuth(identity, from, password, host),
-		from,
-		[]string{to},
-		[]byte(msg),
-	)
+	return smtp.SendMail(addr, auth, from, []string{to}, []byte(msg))
 }
 
 type Payload struct {
