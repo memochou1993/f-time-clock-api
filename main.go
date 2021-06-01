@@ -62,29 +62,33 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u.Credentials == nil {
-		Response(w, http.StatusBadRequest, Payload{})
+		Response(w, http.StatusBadRequest, nil)
 		return
 	}
-	if u.Credentials.Username == "" || u.Credentials.Password == "" {
-		Response(w, http.StatusBadRequest, Payload{})
+	if u.ID == "" || u.Company == "" || u.Credentials.Username == "" {
+		Response(w, http.StatusBadRequest, nil)
 		return
 	}
 	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
 		u.Token = NewToken()
+		if u.Credentials.Password == "" {
+			Response(w, http.StatusBadRequest, nil)
+			return
+		}
 		if err := u.Execute(ActionVerify); err != nil {
 			Response(w, http.StatusInternalServerError, Payload{Error: err.Error()})
 			return
 		}
 		scheduler.Users[u.Credentials.Username] = u
-		Response(w, http.StatusCreated, Payload{})
+		Response(w, http.StatusCreated, nil)
 		return
 	}
 	if !scheduler.Users[u.Credentials.Username].Verified {
-		Response(w, http.StatusForbidden, Payload{})
+		Response(w, http.StatusForbidden, nil)
 		return
 	}
 	if scheduler.Users[u.Credentials.Username].Token != u.Token {
-		Response(w, http.StatusUnauthorized, Payload{})
+		Response(w, http.StatusUnauthorized, nil)
 		return
 	}
 	scheduler.Users[u.Credentials.Username].Email = u.Email
@@ -99,11 +103,19 @@ func Detach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u.Credentials == nil {
-		Response(w, http.StatusBadRequest, Payload{})
+		Response(w, http.StatusBadRequest, nil)
+		return
+	}
+	if u.Credentials.Username == "" {
+		Response(w, http.StatusBadRequest, nil)
 		return
 	}
 	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
-		Response(w, http.StatusNotFound, Payload{})
+		Response(w, http.StatusNotFound, nil)
+		return
+	}
+	if !scheduler.Users[u.Credentials.Username].Verified {
+		Response(w, http.StatusForbidden, nil)
 		return
 	}
 	if scheduler.Users[u.Credentials.Username].Token == u.Token {
@@ -116,7 +128,7 @@ func Detach(w http.ResponseWriter, r *http.Request) {
 		Response(w, http.StatusNoContent, nil)
 		return
 	}
-	Response(w, http.StatusUnauthorized, Payload{})
+	Response(w, http.StatusUnauthorized, nil)
 }
 
 func Verify(w http.ResponseWriter, r *http.Request) {
@@ -126,23 +138,23 @@ func Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u.Credentials == nil {
-		Response(w, http.StatusBadRequest, Payload{})
+		Response(w, http.StatusBadRequest, nil)
 		return
 	}
-	if u.Token == "" {
-		Response(w, http.StatusBadRequest, Payload{})
+	if u.Credentials.Username == "" || u.Token == "" {
+		Response(w, http.StatusBadRequest, nil)
 		return
 	}
 	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
-		Response(w, http.StatusNotFound, Payload{})
+		Response(w, http.StatusNotFound, nil)
 		return
 	}
 	if scheduler.Users[u.Credentials.Username].Token != u.Token {
-		Response(w, http.StatusUnauthorized, Payload{})
+		Response(w, http.StatusUnauthorized, nil)
 		return
 	}
 	scheduler.Users[u.Credentials.Username].Verified = true
-	Response(w, http.StatusOK, Payload{})
+	Response(w, http.StatusOK, nil)
 }
 
 type Scheduler struct {
@@ -399,7 +411,7 @@ func Response(w http.ResponseWriter, code int, v interface{}) {
 func NewToken() string {
 	rand.Seed(time.Now().Unix())
 	token := ""
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 6; i++ {
 		token += string('A' + rune(rand.Intn(26)))
 	}
 	return token
