@@ -48,14 +48,18 @@ func main() {
 	go scheduler.Prune()
 
 	r := mux.NewRouter()
-	r.HandleFunc("/api/attach", Attach).Methods(http.MethodPost)
-	r.HandleFunc("/api/detach", Detach).Methods(http.MethodPost)
-	r.HandleFunc("/api/verify", Verify).Methods(http.MethodPost)
+	r.HandleFunc("/api/attach", Attach).Methods(http.MethodPost, http.MethodOptions)
+	r.HandleFunc("/api/detach", Detach).Methods(http.MethodPost, http.MethodOptions)
+	r.HandleFunc("/api/verify", Verify).Methods(http.MethodPost, http.MethodOptions)
 
 	log.Fatal(http.ListenAndServe(":80", r))
 }
 
 func Attach(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		Response(w, http.StatusOK, nil)
+		return
+	}
 	u := NewUser()
 	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
 		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
@@ -96,6 +100,10 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 }
 
 func Detach(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		Response(w, http.StatusOK, nil)
+		return
+	}
 	u := NewUser()
 	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
 		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
@@ -131,6 +139,10 @@ func Detach(w http.ResponseWriter, r *http.Request) {
 }
 
 func Verify(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		Response(w, http.StatusOK, nil)
+		return
+	}
 	u := NewUser()
 	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
 		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
@@ -406,6 +418,8 @@ type Payload struct {
 }
 
 func Response(w http.ResponseWriter, code int, v interface{}) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.WriteHeader(code)
 	if v == nil {
 		return
