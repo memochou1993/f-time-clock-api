@@ -56,7 +56,7 @@ func main() {
 }
 
 func Attach(w http.ResponseWriter, r *http.Request) {
-	u := &User{}
+	u := NewUser()
 	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
 		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
 		return
@@ -96,7 +96,7 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 }
 
 func Detach(w http.ResponseWriter, r *http.Request) {
-	u := &User{}
+	u := NewUser()
 	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
 		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
 		return
@@ -131,7 +131,7 @@ func Detach(w http.ResponseWriter, r *http.Request) {
 }
 
 func Verify(w http.ResponseWriter, r *http.Request) {
-	u := &User{}
+	u := NewUser()
 	if err := json.NewDecoder(r.Body).Decode(u); err != nil {
 		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
 		return
@@ -167,8 +167,8 @@ func (s *Scheduler) Start() {
 				continue
 			}
 			for ei, event := range user.Events {
-				duration := time.Now().Sub(event.Date).Seconds()
-				if !event.Dispatched && duration >= 0 && duration < 60 {
+				diff := time.Now().Sub(event.Date)
+				if !event.Dispatched && diff >= 0 && diff < time.Minute {
 					s.Users[ui].Events[ei].Dispatched = true
 					if err := user.Execute(event.Action); err != nil {
 						Log(err.Error())
@@ -182,9 +182,9 @@ func (s *Scheduler) Start() {
 }
 
 func (s *Scheduler) Prune() {
-	for range time.Tick(10 * time.Minute) {
+	for range time.Tick(time.Minute) {
 		for _, user := range s.Users {
-			if !user.Verified {
+			if !user.Verified && time.Now().Sub(user.CreatedAt) > 5*time.Minute {
 				delete(scheduler.Users, user.Credentials.Username)
 			}
 		}
@@ -206,6 +206,13 @@ type User struct {
 	Events      []Event      `json:"events"`
 	Token       string       `json:"token,omitempty"`
 	Verified    bool         `json:"-"`
+	CreatedAt   time.Time    `json:"-"`
+}
+
+func NewUser() *User {
+	return &User{
+		CreatedAt: time.Now(),
+	}
 }
 
 type Credentials struct {
