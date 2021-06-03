@@ -122,7 +122,8 @@ func Detach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !scheduler.Users[u.Credentials.Username].Verified {
-		Response(w, http.StatusForbidden, nil)
+		delete(scheduler.Users, u.Credentials.Username)
+		Response(w, http.StatusNoContent, nil)
 		return
 	}
 	if scheduler.Users[u.Credentials.Username].Token == u.Token {
