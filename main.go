@@ -25,8 +25,8 @@ const (
 
 const (
 	ActionIssueToken = "ISSUE_TOKEN"
-	ActionPunchIn    = "PUNCH_IN"
-	ActionPunchOut   = "PUNCH_OUT"
+	ActionClockIn    = "CLOCK_IN"
+	ActionClockOut   = "CLOCK_OUT"
 )
 
 var (
@@ -237,16 +237,16 @@ func (u *User) Execute(action string) error {
 			return err
 		}
 		go Notify(u.Email, fmt.Sprintf("A new token has been issued. Please check your calendar."))
-	case ActionPunchIn:
-		if err := u.PunchIn(); err != nil {
+	case ActionClockIn:
+		if err := u.ClockIn(); err != nil {
 			return err
 		}
 		if err := u.ListStatus(); err != nil {
 			return err
 		}
 		go Notify(u.Email, fmt.Sprintf("Punched in successfully!"))
-	case ActionPunchOut:
-		if err := u.PunchOut(); err != nil {
+	case ActionClockOut:
+		if err := u.ClockOut(); err != nil {
 			return err
 		}
 		if err := u.ListStatus(); err != nil {
@@ -284,7 +284,7 @@ func (u *User) Logout() error {
 	return u.Request("accounts/logout", nil)
 }
 
-func (u *User) PunchIn() error {
+func (u *User) ClockIn() error {
 	params := url.Values{}
 	params.Add("_method", `POST`)
 	params.Add("data[ClockRecord][user_id]", u.ID)
@@ -299,7 +299,7 @@ func (u *User) PunchIn() error {
 	return u.Request("users/clock_listing", body)
 }
 
-func (u *User) PunchOut() error {
+func (u *User) ClockOut() error {
 	params := url.Values{}
 	params.Add("_method", `POST`)
 	params.Add("data[ClockRecord][user_id]", u.ID)
@@ -376,7 +376,7 @@ func Notify(to string, body string) {
 	identity := ""
 	from := os.Getenv("SMTP_USERNAME")
 	password := os.Getenv("SMTP_PASSWORD")
-	subject := "FemasHR Puncher"
+	subject := "Time Clock"
 	auth := smtp.PlainAuth(identity, from, password, host)
 
 	header := make(map[string]string)
