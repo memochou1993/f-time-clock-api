@@ -65,16 +65,12 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
 		return
 	}
-	if u.Credentials == nil {
+	if u.ID == "" || u.Company == "" || u.Username == "" {
 		Response(w, http.StatusBadRequest, nil)
 		return
 	}
-	if u.ID == "" || u.Company == "" || u.Credentials.Username == "" {
-		Response(w, http.StatusBadRequest, nil)
-		return
-	}
-	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
-		if u.Credentials.Password == "" {
+	if _, ok := scheduler.Users[u.Username]; !ok {
+		if u.Password == "" {
 			Response(w, http.StatusBadRequest, nil)
 			return
 		}
@@ -82,20 +78,20 @@ func Attach(w http.ResponseWriter, r *http.Request) {
 			Response(w, http.StatusInternalServerError, Payload{Error: err.Error()})
 			return
 		}
-		scheduler.Users[u.Credentials.Username] = u
+		scheduler.Users[u.Username] = u
 		Response(w, http.StatusCreated, nil)
 		return
 	}
-	if !scheduler.Users[u.Credentials.Username].Verified {
+	if !scheduler.Users[u.Username].Verified {
 		Response(w, http.StatusForbidden, nil)
 		return
 	}
-	if scheduler.Users[u.Credentials.Username].Token != u.Token {
+	if scheduler.Users[u.Username].Token != u.Token {
 		Response(w, http.StatusUnauthorized, nil)
 		return
 	}
-	scheduler.Users[u.Credentials.Username].Email = u.Email
-	scheduler.Users[u.Credentials.Username].Events = u.Events
+	scheduler.Users[u.Username].Email = u.Email
+	scheduler.Users[u.Username].Events = u.Events
 	Response(w, http.StatusOK, Payload{Data: User{Events: u.Events}})
 }
 
@@ -109,30 +105,26 @@ func Detach(w http.ResponseWriter, r *http.Request) {
 		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
 		return
 	}
-	if u.Credentials == nil {
+	if u.Username == "" {
 		Response(w, http.StatusBadRequest, nil)
 		return
 	}
-	if u.Credentials.Username == "" {
-		Response(w, http.StatusBadRequest, nil)
-		return
-	}
-	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
+	if _, ok := scheduler.Users[u.Username]; !ok {
 		Response(w, http.StatusNotFound, nil)
 		return
 	}
-	if !scheduler.Users[u.Credentials.Username].Verified {
-		delete(scheduler.Users, u.Credentials.Username)
+	if !scheduler.Users[u.Username].Verified {
+		delete(scheduler.Users, u.Username)
 		Response(w, http.StatusNoContent, nil)
 		return
 	}
-	if scheduler.Users[u.Credentials.Username].Token == u.Token {
-		delete(scheduler.Users, u.Credentials.Username)
+	if scheduler.Users[u.Username].Token == u.Token {
+		delete(scheduler.Users, u.Username)
 		Response(w, http.StatusNoContent, nil)
 		return
 	}
-	if scheduler.Users[u.Credentials.Username].Credentials.Password == u.Credentials.Password {
-		delete(scheduler.Users, u.Credentials.Username)
+	if scheduler.Users[u.Username].Password == u.Password {
+		delete(scheduler.Users, u.Username)
 		Response(w, http.StatusNoContent, nil)
 		return
 	}
@@ -149,23 +141,19 @@ func Verify(w http.ResponseWriter, r *http.Request) {
 		Response(w, http.StatusBadRequest, Payload{Error: err.Error()})
 		return
 	}
-	if u.Credentials == nil {
+	if u.Username == "" || u.Token == "" {
 		Response(w, http.StatusBadRequest, nil)
 		return
 	}
-	if u.Credentials.Username == "" || u.Token == "" {
-		Response(w, http.StatusBadRequest, nil)
-		return
-	}
-	if _, ok := scheduler.Users[u.Credentials.Username]; !ok {
+	if _, ok := scheduler.Users[u.Username]; !ok {
 		Response(w, http.StatusNotFound, nil)
 		return
 	}
-	if scheduler.Users[u.Credentials.Username].Token != u.Token {
+	if scheduler.Users[u.Username].Token != u.Token {
 		Response(w, http.StatusUnauthorized, nil)
 		return
 	}
-	scheduler.Users[u.Credentials.Username].Verified = true
+	scheduler.Users[u.Username].Verified = true
 	Response(w, http.StatusOK, nil)
 }
 
@@ -198,7 +186,7 @@ func (s *Scheduler) Prune() {
 	for range time.Tick(time.Minute) {
 		for _, user := range s.Users {
 			if !user.Verified && time.Now().Sub(user.CreatedAt) > 5*time.Minute {
-				delete(scheduler.Users, user.Credentials.Username)
+				delete(scheduler.Users, user.Username)
 			}
 		}
 	}
@@ -211,26 +199,22 @@ func NewScheduler() *Scheduler {
 }
 
 type User struct {
-	ID          string       `json:"id,omitempty"`
-	Company     string       `json:"company,omitempty"`
-	Cookie      string       `json:"-"`
-	Credentials *Credentials `json:"credentials,omitempty"`
-	Email       string       `json:"email,omitempty"`
-	Events      []Event      `json:"events"`
-	Token       string       `json:"token,omitempty"`
-	Verified    bool         `json:"-"`
-	CreatedAt   time.Time    `json:"-"`
+	ID        string    `json:"id,omitempty"`
+	Company   string    `json:"company,omitempty"`
+	Cookie    string    `json:"-"`
+	Email     string    `json:"email,omitempty"`
+	Events    []Event   `json:"events"`
+	Password  string    `json:"password,omitempty"`
+	Token     string    `json:"token,omitempty"`
+	Username  string    `json:"username,omitempty"`
+	Verified  bool      `json:"-"`
+	CreatedAt time.Time `json:"-"`
 }
 
 func NewUser() *User {
 	return &User{
 		CreatedAt: time.Now(),
 	}
-}
-
-type Credentials struct {
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
 }
 
 type Event struct {
@@ -288,8 +272,8 @@ func (u *User) SetCookie() error {
 
 func (u *User) Login() error {
 	params := url.Values{}
-	params.Add("data[Account][username]", u.Credentials.Username)
-	params.Add("data[Account][passwd]", u.Credentials.Password)
+	params.Add("data[Account][username]", u.Username)
+	params.Add("data[Account][passwd]", u.Password)
 	params.Add("data[remember]", `0`)
 	body := strings.NewReader(params.Encode())
 
