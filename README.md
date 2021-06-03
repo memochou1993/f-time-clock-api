@@ -1,4 +1,4 @@
-FemasHR Puncher
+Time Clock
 ===
 
 # API
@@ -9,15 +9,15 @@ Attach a user to scheduler.
 
 ### Endpoint
 
-`POST` <https://femashr-puncher.epoch.tw/api/attach>
+`POST` <https://time-clock.epoch.tw/api/attach>
 
 ### Actions
 
 | Name          | Description                   |
 | ------------- | ----------------------------- |
 | `ISSUE_TOKEN` | Issue a new token to calendar |
-| `PUNCH_IN`    | Punch in                      |
-| `PUNCH_OUT`   | Punch out                     |
+| `CLOCK_IN`    | Clock in                      |
+| `CLOCK_OUT`   | Clock out                     |
 
 ### Request
 
@@ -49,7 +49,7 @@ Detach a user from scheduler.
 
 ### Endpoint
 
-`POST` <https://femashr-puncher.epoch.tw/api/detach>
+`POST` <https://time-clock.epoch.tw/api/detach>
 
 ### Request
 
@@ -72,7 +72,7 @@ Verify a user.
 
 ### Endpoint
 
-`POST` <https://femashr-puncher.epoch.tw/api/verify>
+`POST` <https://time-clock.epoch.tw/api/verify>
 
 ### Request
 

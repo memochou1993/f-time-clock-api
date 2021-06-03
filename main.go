@@ -244,7 +244,7 @@ func (u *User) Execute(action string) error {
 		if err := u.ListStatus(); err != nil {
 			return err
 		}
-		go Notify(u.Email, fmt.Sprintf("Punched in successfully!"))
+		go Notify(u.Email, fmt.Sprintf("Clocked in successfully!"))
 	case ActionClockOut:
 		if err := u.ClockOut(); err != nil {
 			return err
@@ -252,7 +252,7 @@ func (u *User) Execute(action string) error {
 		if err := u.ListStatus(); err != nil {
 			return err
 		}
-		go Notify(u.Email, fmt.Sprintf("Punched out successfully!"))
+		go Notify(u.Email, fmt.Sprintf("Clocked out successfully!"))
 	}
 	if err := u.Logout(); err != nil {
 		return err
