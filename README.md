@@ -24,10 +24,6 @@ Attach a user to scheduler.
 ```json
 {
   "company": "<COMPANY_CODE>",
-  "credentials": {
-    "username": "<USERNAME>",
-    "password": "<PASSWORD>"
-  },
   "email": "<EMAIL>",
   "events": [
     {
@@ -35,7 +31,9 @@ Attach a user to scheduler.
       "date": "2021-06-01T18:00:00+08:00"
     }
   ],
-  "id": "<USER_ID>"
+  "id": "<USER_ID>",
+  "password": "<PASSWORD>",
+  "username": "<USERNAME>"
 }
 ```
 
@@ -55,10 +53,8 @@ Detach a user from scheduler.
 
 ```json
 {
-  "credentials": {
-    "username": "<USERNAME>"
-  },
-  "token": "<TOKEN>"
+  "token": "<TOKEN>",
+  "username": "<USERNAME>"
 }
 ```
 
@@ -78,10 +74,8 @@ Verify a user.
 
 ```json
 {
-  "credentials": {
-    "username": "<USERNAME>"
-  },
-  "token": "<TOKEN>"
+  "token": "<TOKEN>",
+  "username": "<USERNAME>"
 }
 ```
 
