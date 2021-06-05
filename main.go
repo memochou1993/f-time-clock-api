@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
 	"io"
 	"log"
 	"math/rand"
@@ -14,6 +13,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/gorilla/mux"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -168,8 +169,7 @@ func (s *Scheduler) Start() {
 				continue
 			}
 			for ei, event := range user.Events {
-				diff := time.Now().Sub(event.Date)
-				if !event.Dispatched && diff >= 0 && diff < time.Minute {
+				if !event.Dispatched && time.Now().Sub(event.Date) >= 0 {
 					s.Users[ui].Events[ei].Dispatched = true
 					if err := user.Execute(event.Action); err != nil {
 						Log(err.Error())
