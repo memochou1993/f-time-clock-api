@@ -169,7 +169,8 @@ func (s *Scheduler) Start() {
 				continue
 			}
 			for ei, event := range user.Events {
-				if !event.Dispatched && time.Now().Sub(event.Date) >= 0 {
+				diff := time.Now().Sub(event.Date)
+				if !event.Dispatched && diff >= 0 && diff < time.Minute {
 					s.Users[ui].Events[ei].Dispatched = true
 					if err := user.Execute(event.Action); err != nil {
 						Log(err.Error())
