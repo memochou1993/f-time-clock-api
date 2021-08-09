@@ -9,7 +9,7 @@ Attach a user to scheduler.
 
 ### Endpoint
 
-`POST` <https://time-clock.epoch.tw/api/attach>
+`POST /api/attach`
 
 ### Actions
 
@@ -47,7 +47,7 @@ Detach a user from scheduler.
 
 ### Endpoint
 
-`POST` <https://time-clock.epoch.tw/api/detach>
+`POST /api/detach`
 
 ### Request
 
@@ -68,7 +68,7 @@ Verify a user.
 
 ### Endpoint
 
-`POST` <https://time-clock.epoch.tw/api/verify>
+`POST /api/verify`
 
 ### Request
 
