@@ -267,7 +267,7 @@ func (u *User) SetCookie() error {
 		return err
 	}
 	defer CloseBody(resp.Body)
-	u.Cookie = resp.Header.Get("Set-Cookie")
+	u.Cookie = strings.Join(resp.Header.Values("Set-Cookie"), "; ")
 	return nil
 }
 
