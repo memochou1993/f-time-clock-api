@@ -1,0 +1,29 @@
+meta {
+  name: /attach
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{url}}/api/attach
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "{{username}}",
+    "company": "{{company}}",
+    "email": "{{email}}",
+    "id": "{{id}}",
+    "token": "",
+    "events": [
+      {
+        "id": 1739262816968,
+        "action": "CLOCK_IN",
+        "date": "2025-03-10T14:00:00+08:00"
+      }
+    ],
+    "password": "{{password}}"
+  }
+}

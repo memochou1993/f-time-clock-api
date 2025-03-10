@@ -1,0 +1,18 @@
+meta {
+  name: /verify
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{url}}/api/verify
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "{{username}}",
+    "token": "{{token}}"
+  }
+}

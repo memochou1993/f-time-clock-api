@@ -1,0 +1,18 @@
+meta {
+  name: /detach
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{url}}/api/detach
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "{{username}}",
+    "token": "{{token}}"
+  }
+}

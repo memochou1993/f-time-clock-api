@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "f-time-clock-api",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}
