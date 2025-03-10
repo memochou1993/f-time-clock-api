@@ -49,11 +49,30 @@ func main() {
 	go scheduler.Prune()
 
 	r := mux.NewRouter()
+	r.HandleFunc("/api/users", CheckUsers).Methods(http.MethodPost, http.MethodOptions)
 	r.HandleFunc("/api/attach", Attach).Methods(http.MethodPost, http.MethodOptions)
 	r.HandleFunc("/api/detach", Detach).Methods(http.MethodPost, http.MethodOptions)
 	r.HandleFunc("/api/verify", Verify).Methods(http.MethodPost, http.MethodOptions)
 
 	log.Fatal(http.ListenAndServe(":80", r))
+}
+
+func CheckUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		Response(w, http.StatusOK, nil)
+		return
+	}
+
+	var users []User
+	for _, user := range scheduler.Users {
+		users = append(users, User{
+			Username: user.Username,
+			Verified: user.Verified,
+			CreatedAt: user.CreatedAt,
+		})
+	}
+
+	Response(w, http.StatusOK, Payload{Data: users})
 }
 
 func Attach(w http.ResponseWriter, r *http.Request) {
@@ -173,7 +192,7 @@ func (s *Scheduler) Start() {
 				if !event.Dispatched && diff >= 0 && diff < time.Minute {
 					s.Users[ui].Events[ei].Dispatched = true
 					if err := user.Execute(event.Action); err != nil {
-						Log(err.Error())
+						Log(fmt.Sprintf("Failed to execute %s for %s: %s", event.Action, user.Username, err.Error()))
 						go Notify(user.Email, fmt.Sprintf("Error: %s", err.Error()))
 						continue
 					}
@@ -204,12 +223,12 @@ type User struct {
 	Company   string    `json:"company,omitempty"`
 	Cookie    string    `json:"-"`
 	Email     string    `json:"email,omitempty"`
-	Events    []Event   `json:"events"`
+	Events    []Event   `json:"events,omitempty"`
 	Password  string    `json:"password,omitempty"`
 	Token     string    `json:"token,omitempty"`
 	Username  string    `json:"username,omitempty"`
-	Verified  bool      `json:"-"`
-	CreatedAt time.Time `json:"-"`
+	Verified  bool      `json:"verified"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func NewUser() *User {
@@ -237,7 +256,7 @@ func (u *User) Execute(action string) error {
 		if err := u.CreateEvent(u.Token); err != nil {
 			return err
 		}
-		go Notify(u.Email, fmt.Sprintf("A new token has been issued. Please check your calendar."))
+		go Notify(u.Email, "A new token has been issued. Please check your calendar.")
 	case ActionClockIn:
 		if err := u.ClockIn(); err != nil {
 			return err
@@ -245,7 +264,7 @@ func (u *User) Execute(action string) error {
 		if err := u.ListStatus(); err != nil {
 			return err
 		}
-		go Notify(u.Email, fmt.Sprintf("Clocked in successfully!"))
+		go Notify(u.Email, "Clocked in successfully!")
 	case ActionClockOut:
 		if err := u.ClockOut(); err != nil {
 			return err
@@ -253,7 +272,7 @@ func (u *User) Execute(action string) error {
 		if err := u.ListStatus(); err != nil {
 			return err
 		}
-		go Notify(u.Email, fmt.Sprintf("Clocked out successfully!"))
+		go Notify(u.Email, "Clocked out successfully!")
 	}
 	if err := u.Logout(); err != nil {
 		return err
@@ -394,7 +413,7 @@ func Notify(to string, body string) {
 	message += base64.StdEncoding.EncodeToString([]byte("\r\n" + body + "\r\n"))
 
 	if err := smtp.SendMail(addr, auth, from, []string{to}, []byte(message)); err != nil {
-		Log(err.Error())
+		Log(fmt.Sprintf("Failed to send email to %s: %s", to, err.Error()))
 	}
 }
 
